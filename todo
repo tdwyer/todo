@@ -1,0 +1,333 @@
+#!/bin/sh
+#
+###############################################################################
+#                                                                             #
+# Copyright (c) 2014 Thomas Dwyer. All rights reserved.                       #
+#                                                                             #
+# Redistribution and use in source and binary forms, with or without          #
+# modification, are permitted provided that the following conditions          #
+# are met:                                                                    #
+# 1. Redistributions of source code must retain the above copyright           #
+#    notice, this list of conditions and the following disclaimer.            #
+# 2. Redistributions in binary form must reproduce the above copyright        #
+#    notice, this list of conditions and the following disclaimer in the      #
+#    documentation and/or other materials provided with the distribution.     #
+#                                                                             #
+# THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR        #
+# IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES   #
+# OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.     #
+# IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,            #
+# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT    #
+# NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,   #
+# DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY       #
+# THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT         #
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF    #
+# THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.           #
+#                                                                             #
+###############################################################################
+#
+
+# Number of calendar events to display before and after today
+#
+_BEFORE_DAYS=2
+_AFTER_DAYS=14
+
+MAILDIR_1="/var/mail/$USER/external/tomd/td"
+MAILDIR_2="/var/mail/$USER/external/school/uh"
+MAILDIR_3="/var/mail/$USER"
+MAILDIR_1_NAME="tomd.tel"
+MAILDIR_2_NAME="hawaii.edu"
+MAILDIR_3_NAME="localhost"
+
+CHMOD_BIN="/bin/chmod"
+MKDIR_BIN="/bin/mkdir"
+TOUCH_BIN="/usr/bin/touch"
+CAL_BIN="/usr/bin/cal"
+CALENDAR_BIN="/usr/bin/calendar"
+SED_BIN="/usr/bin/sed"
+TPUT_BIN="/usr/bin/tput"
+DATE_BIN="/bin/date"
+FIND_BIN="/usr/bin/find"
+
+#[[ -z $EDITOR ]] && EDITOR="/usr/bin/mg"
+EDITOR="/usr/local/bin/vim"
+[[ -z $CALENDAR_DIR ]] && CALENDAR_DIR="$HOME/.calendar"
+[[ -z $CALENDAR ]] && CALENDAR="$CALENDAR_DIR/calendar"
+
+TMPFILE="$CALENDAR_DIR/event.tmp"
+
+[[ ! -d $CALENDAR_DIR ]] && \
+  (
+    $MKDIR_BIN $CALENDAR_DIR
+    $CHMOD_BIN 0700 $CALENDAR_DIR
+  )
+
+[[ ! -f $CALENDAR ]] && \
+  (
+    $MKDIR_BIN $CALENDAR
+    $CHMOD_BIN 0700 $CALENDAR
+  )
+
+[[ ! -f $TMPFILE ]] && \
+  (
+    $TOUCH_BIN $TMPFILE
+    $CHMOD_BIN 0600 $TMPFILE
+  ) || echo -n '' >$TMPFILE
+
+main() {
+  color_defs
+  check_calendar_dir
+  check_calendar
+  [[ ! -z $1 ]] && \
+    {
+      case "${1}" in
+        -h|--help)
+          echo "Usage: $0 (''|date) "
+          echo "       $0 is a control script for the OpenBSD calendar"
+          echo "       Default: display formatted users calendar"
+          echo "       If date: prompted user for event description"
+          exit 0
+        ;;
+        *)
+          add_event "${@}"
+      esac
+    }
+
+  display
+  exit 0
+}
+
+check_calendar_dir() {
+  # Make missing calendar directory
+  [[ ! -d "$CALENDAR_DIR" ]] && \
+    (
+      $MKDIR_BIN "$CALENDAR_DIR"
+      $CHMOD_BIN 0700 "$CALENDAR_DIR"
+    )
+}
+
+check_calendar() {
+  # Make missing calendar
+  [[ ! -f "$CALENDAR" ]] && \
+    (
+      $TOUCH_BIN -f "$CALENDAR"
+      echo 'LANG=C' > "$CALENDAR"
+      echo 'Easter=Ostern' >> "$CALENDAR"
+      echo >> "$CALENDAR"
+      echo '#include <calendar.usholiday>' >> "$CALENDAR"
+      echo >> "$CALENDAR"
+    )
+}
+
+add_event() {
+  # Add new calendar event
+  # 
+  local DATE="${@}"
+  $EDITOR $TMPFILE
+  EVENT=$(cat $TMPFILE)
+  [[ ! -z $EVENT ]] && \
+    (
+      echo "$DATE\t$EVENT" >> "$CALENDAR"
+    )
+}
+
+display() {
+  _day=$(date +%d)
+  _cal_day=$(date +%e)
+  _yday=$(expr $_day - 1 )
+  _yyday=$(expr $_day - 2 )
+  _yyyday=$(expr $_day - 3 )
+  _year=$(date +%Y)
+  _month=$(date +%B)
+  _short_month=$(date +%b)
+
+  # define colors
+  #
+  _calendar_hr1=$_BLUE
+  _calendar_hr2=$_PURP
+  _calendar_today=$_REDI
+  #
+  _date_time_color=$_BLUE
+  #
+  _mail_name_color=$_PURP
+  _mail_count_color=$_REDI
+  #
+  _agenda_color_month=$_PURP
+  # _agenda_color_before=$_OFF
+  _agenda_color_today=$_REDI
+  _agenda_color_after=$_WHITE
+  _agenda_color_mark=$_GREEN
+  _agenda_color_flag=$_YELLOWI
+  _agenda_color_crit=$_REDI
+
+  # Clear the display
+  #
+  clear
+  show_calendar
+  show_agenda
+}
+
+show_calendar() {
+  # Display the Calender
+  #
+  ($CAL_BIN) | \
+    (
+      $SED_BIN \
+        -e "s/$_month/$_calendar_hr1&/" \
+        -e "s/$_year/&$_OFF/" \
+        -e "s/\([[:upper:]][[:lower:]]\)\([[:space:]][[:upper:]][[:lower:]]\)\{6\}/$_calendar_hr2&$_OFF/g" \
+        -e "s/\(^\)\($_cal_day\)\([[:space:]].*$\)/\1$_calendar_today\2$_OFF\3/" \
+        -e "s/\([[:space:]]\)\($_cal_day\)\([[:>:]]\)/\1$_calendar_today\2$_OFF\3/" \
+        -e "s/\([[:space:]]\)\($_cal_day\)\([[:space:]]\)/\1$_calendar_today\2$_OFF\3/"
+    )
+}
+
+show_agenda() {
+  # Display the current date and time
+  #
+  echo -ne "\n${_date_time_color}$($DATE_BIN) $_OFF[ "
+  mailstat
+  echo "]"
+  hard_line
+
+  # Display the agenda
+  #
+  before
+  today
+  after
+}
+
+mailstat() {
+  local _m1=$($FIND_BIN $MAILDIR_1 -type f -name "*," |wc -l |sed 's/ //g')
+  local _m2=$($FIND_BIN $MAILDIR_2 -type f -name "*," |wc -l |sed 's/ //g')
+  local _m3=$($FIND_BIN $MAILDIR_3 -maxdepth 2 -type f -name "*," |wc -l |sed 's/ //g')
+  echo -ne "$_mail_name_color$MAILDIR_1_NAME$_OFF: "
+  echo -ne "$_mail_count_color$_m1 $_OFF"
+  echo -ne "$_mail_name_color$MAILDIR_2_NAME$_OFF: "
+  echo -ne "$_mail_count_color$_m2 $_OFF"
+  echo -ne "$_mail_name_color$MAILDIR_3_NAME$_OFF: "
+  echo -ne "$_mail_count_color$_m3 $_OFF"
+}
+
+_cols=$($TPUT_BIN cols)
+[[ $LC_CTYPE == "en_US.UTF-8" ]] && _hline="─" || _hline="-"
+hard_line() {
+  local n=$(( $1 + 1 ))
+  [[ $n -le $_cols ]] && \
+    {
+      echo -n $_hline
+      hard_line $n
+    } || echo
+}
+
+before() {
+  local _after_days=0
+  ($CALENDAR_BIN -B $_BEFORE_DAYS -A $_after_days ) | \
+    (
+      $SED_BIN \
+        -e "/^\($_short_month[[:space:]]$_day[[:space:]].*\)/d" \
+        -e "s/^\([[:upper:]][[:lower:]][[:lower:]][[:space:]]\)/$_agenda_color_month&$_OFF/" \
+        -e "s/\(\+\+\)\([[:space:]]\)/$_OFF$_agenda_color_mark\1$_OFF\2/" \
+        -e "s/\(::\)\([[:space:]]\)/$_OFF$_agenda_color_flag\1$_OFF\2/" \
+        -e "s/\(>>\)\([[:space:]]\)/$_OFF$_agenda_color_crit\1$_OFF\2/"
+    )
+}
+
+today() {
+  local _BEFORE_DAYS=0
+  local _AFTER_DAYS=0
+  ($CALENDAR_BIN -B $_before_days -A $_after_days ) | \
+    (
+      $SED_BIN \
+        -e "s/^\($_short_month[[:space:]]\)\($_day[[:space:]]\)\(.\)\(.*$\)/\1$_agenda_color_today\2$_agenda_color_today\3\4$_OFF/" \
+        -e "s/^\($_short_month\)\([[:space:]].*$\)/$_agenda_color_month\1$_OFF\2/" \
+        -e "s/\(\+\+\)\([[:space:]]\)/$_OFF$_agenda_color_mark\1$_OFF$_agenda_color_today\2/" \
+        -e "s/\(::\)\([[:space:]]\)/$_OFF$_agenda_color_flag\1$_OFF$_agenda_color_today\2/" \
+        -e "s/\(>>\)\([[:space:]]\)/$_OFF$_agenda_color_crit\1$_OFF$_agenda_color_today\2/" \
+        -ne "/^\($_agenda_color_month$_short_month$_OFF[[:space:]]\)\(.*\)\($_agenda_color_today$_day[[:space:]][$_agenda_color_today].*[$_OFF]\)$/p"
+    )
+}
+
+after() {
+  local _before_days=0
+  ($CALENDAR_BIN -B $_before_days -A $_AFTER_DAYS ) | \
+    (
+      $SED_BIN \
+        -e "/^\($_short_month[[:space:]]$_day[[:space:]].*\)/d" \
+        -e "s/^\([[:upper:]][[:lower:]][[:lower:]]\)\(.*\)\([[:space:]][0-3][0-9][[:space:]]\)\(.\)\(.*$\)/\1\2\3\4$_agenda_color_after\5$_OFF/" \
+        -e "s/^\([[:upper:]][[:lower:]][[:lower:]][[:space:]]\)/$_agenda_color_month&$_OFF/" \
+        -e "s/\(\+\+\)\([[:space:]]\)/$_OFF$_agenda_color_mark\1$_OFF$_agenda_color_after\2/" \
+        -e "s/\(::\)\([[:space:]]\)/$_OFF$_agenda_color_flag\1$_OFF$_agenda_color_after\2/" \
+        -e "s/\(>>\)\([[:space:]]\)/$_OFF$_agenda_color_crit\1$_OFF$_agenda_color_after\2/"
+    )
+}
+
+color_defs() {
+  _BLACK="[30m"
+  _BLACKB="[30;01m"
+  _BLACKU="[30;04m"
+  _BLACKR="[40m"
+  _BLACKI="[90m"
+  _BLACKBI="[90;01m"
+  _BLACKIR="[100m"
+
+  _RED="[31m"
+  _REDB="[31;01m"
+  _REDU="[31;04m"
+  _REDR="[41m"
+  _REDI="[91m"
+  _REDBI="[91;01m"
+  _REDIR="[101m"
+
+  _GREEN="[32m"
+  _GREENB="[32;01m"
+  _GREENU="[32;04m"
+  _GREENR="[42m"
+  _GREENI="[92m"
+  _GREENBI="[92;01m"
+  _GREENIR="[102m"
+
+  _YELLOW="[33m"
+  _YELLOWB="[33;01m"
+  _YELLOWU="[33;04m"
+  _YELLOWR="[43m"
+  _YELLOWI="[93m"
+  _YELLOWBI="[93;01m"
+  _YELLOWIR="[103m"
+
+  _BLUE="[34m"
+  _BLUEB="[34;01m"
+  _BLUEU="[34;04m"
+  _BLUER="[44m"
+  _BLUEI="[94m"
+  _BLUEBI="[94;01m"
+  _BLUEIR="[104m"
+
+  _PURP="[35m"
+  _PURPB="[35;01m"
+  _PURPU="[35;04m"
+  _PURPR="[45m"
+  _PURPI="[95m"
+  _PURPBI="[95;01m"
+  _PURPIR="[105m"
+
+  _CYAN="[36m"
+  _CYANB="[36;01m"
+  _CYANU="[36;04m"
+  _CYANR="[46m"
+  _CYANI="[96m"
+  _CYANBI="[96;01m"
+  _CYANIR="[106m"
+
+  _WHITE="[37m"
+  _WHITEB="[37;01m"
+  _WHITEU="[37;04m"
+  _WHITER="[47m"
+  _WHITEI="[97m"
+  _WHITEBI="[97;01m"
+  _WHITEIR="[107m"
+  _OFF="[0m"
+}
+
+main $@
+exit 0
