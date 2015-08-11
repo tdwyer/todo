@@ -2,7 +2,7 @@
 #
 ###############################################################################
 #                                                                             #
-# Copyright (c) 2014 Thomas Dwyer. All rights reserved.                       #
+# Copyright (c) 2015 Thomas Dwyer. All rights reserved.                       #
 #                                                                             #
 # Redistribution and use in source and binary forms, with or without          #
 # modification, are permitted provided that the following conditions          #
@@ -26,18 +26,10 @@
 #                                                                             #
 ###############################################################################
 #
-
 # Number of calendar events to display before and after today
 #
 _BEFORE_DAYS=2
 _AFTER_DAYS=14
-
-MAILDIR_1="/var/mail/$USER/external/tomd/td"
-MAILDIR_2="/var/mail/$USER/external/school/uh"
-MAILDIR_3="/var/mail/$USER"
-MAILDIR_1_NAME="tomd.tel"
-MAILDIR_2_NAME="hawaii.edu"
-MAILDIR_3_NAME="localhost"
 
 CHMOD_BIN="/bin/chmod"
 MKDIR_BIN="/bin/mkdir"
@@ -149,16 +141,13 @@ display() {
   #
   _date_time_color=$_BLUE
   #
-  _mail_name_color=$_PURP
-  _mail_count_color=$_REDI
-  #
   _agenda_color_month=$_PURP
   # _agenda_color_before=$_OFF
   _agenda_color_today=$_REDI
   _agenda_color_after=$_WHITE
-  _agenda_color_mark=$_GREEN
+  _agenda_color_mark=$_YELLOW
   _agenda_color_flag=$_YELLOWI
-  _agenda_color_crit=$_REDI
+  _agenda_color_crit=$_GREEN
 
   # Clear the display
   #
@@ -185,9 +174,7 @@ show_calendar() {
 show_agenda() {
   # Display the current date and time
   #
-  echo -ne "\n${_date_time_color}$($DATE_BIN) $_OFF[ "
-  mailstat
-  echo "]"
+  echo -e "\n${_date_time_color}$($DATE_BIN) $_OFF"
   hard_line
 
   # Display the agenda
@@ -195,18 +182,6 @@ show_agenda() {
   before
   today
   after
-}
-
-mailstat() {
-  local _m1=$($FIND_BIN $MAILDIR_1 -type f -name "*," |wc -l |sed 's/ //g')
-  local _m2=$($FIND_BIN $MAILDIR_2 -type f -name "*," |wc -l |sed 's/ //g')
-  local _m3=$($FIND_BIN $MAILDIR_3 -maxdepth 2 -type f -name "*," |wc -l |sed 's/ //g')
-  echo -ne "$_mail_name_color$MAILDIR_1_NAME$_OFF: "
-  echo -ne "$_mail_count_color$_m1 $_OFF"
-  echo -ne "$_mail_name_color$MAILDIR_2_NAME$_OFF: "
-  echo -ne "$_mail_count_color$_m2 $_OFF"
-  echo -ne "$_mail_name_color$MAILDIR_3_NAME$_OFF: "
-  echo -ne "$_mail_count_color$_m3 $_OFF"
 }
 
 _cols=$($TPUT_BIN cols)
@@ -234,8 +209,8 @@ before() {
 }
 
 today() {
-  local _BEFORE_DAYS=0
-  local _AFTER_DAYS=0
+  local _before_days=0
+  local _after_days=0
   ($CALENDAR_BIN -B $_before_days -A $_after_days ) | \
     (
       $SED_BIN \
